@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Repository {
+  id             String           @id @default(uuid())
+  github_url     String           @unique
+  language       String?
+  default_branch String           @default("main")
+  indexed_at     DateTime?
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+  files          File[]
+  reports        AnalysisReport[]
+}
+
+model File {
+  id            String     @id @default(uuid())
+  repository_id String
+  path          String
+  checksum      String
+  created_at    DateTime   @default(now())
+  repository    Repository @relation(fields: [repository_id], references: [id], onDelete: Cascade)
+  chunks        Chunk[]
+
+  @@unique([repository_id, path])
+}
+
+model Chunk {
+  id         String   @id @default(uuid())
+  file_id    String
+  chunk_text String
+  embedding  Unsupported("vector(768)")?
+  created_at DateTime @default(now())
+  file       File     @relation(fields: [file_id], references: [id], onDelete: Cascade)
+}
+
+model AnalysisReport {
+  id            String     @id @default(uuid())
+  repository_id String
+  report_type   String
+  result_json   Json
+  created_at    DateTime   @default(now())
+  repository    Repository @relation(fields: [repository_id], references: [id], onDelete: Cascade)
+
+  @@index([repository_id, report_type])
+}
