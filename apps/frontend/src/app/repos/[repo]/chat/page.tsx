@@ -7,10 +7,18 @@ import Sidebar from '@/components/Sidebar'
 import TopBar from '@/components/TopBar'
 import { TypewriterEffect } from '@/components/aceternity/TypewriterEffect'
 import { ShimmerButton } from '@/components/aceternity/ShimmerButton'
+import ReactMarkdown from 'react-markdown'
 
 interface Message {
   role: 'user' | 'ai'
   content: string
+}
+
+interface RepoDetails {
+  id: string
+  github_url: string
+  language?: string
+  indexed_at?: string
 }
 
 const placeholderWords = [
@@ -22,17 +30,37 @@ const placeholderWords = [
 
 export default function ChatPage({ params }: { params: Promise<{ repo: string }> }) {
   const unwrappedParams = React.use(params)
-  const repo = unwrappedParams.repo
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'user',
-      content: 'How is the authentication flow implemented in this repository? I want to understand the handshake between the frontend and the services.',
-    },
-  ])
+  const repoId = unwrappedParams.repo
+
+  const [repoDetails, setRepoDetails] = useState<RepoDetails | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isFocused, setIsFocused] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+
+  useEffect(() => {
+    async function loadRepo() {
+      try {
+        const repoRes = await fetch(`${API_URL}/repositories/${repoId}`)
+        const repoData = await repoRes.json()
+        setRepoDetails(repoData)
+        setMessages([
+          {
+            role: 'ai',
+            content: `Hello! I've loaded the AST chunks for \`${repoData.github_url.split('/').pop()}\`. How can I help you explore this codebase?`
+          }
+        ])
+      } catch (err) {
+        console.error('Failed to load repo data', err)
+      }
+    }
+    loadRepo()
+  }, [repoId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -45,11 +73,31 @@ export default function ChatPage({ params }: { params: Promise<{ repo: string }>
     }
   }
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return
-    setMessages((prev) => [...prev, { role: 'user', content: inputValue }])
+  const handleSend = async () => {
+    if (!inputValue.trim() || isLoading) return
+    const userMessage = inputValue
+    
+    setMessages((prev) => [...prev, { role: 'user', content: userMessage }])
     setInputValue('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    
+    setIsLoading(true)
+    
+    try {
+      const res = await fetch(`${API_URL}/repositories/${repoId}/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: userMessage })
+      })
+      const data = await res.json()
+      
+      setMessages((prev) => [...prev, { role: 'ai', content: data.answer || 'I am not sure.' }])
+    } catch (err) {
+      console.error(err)
+      setMessages((prev) => [...prev, { role: 'ai', content: 'An error occurred while generating the response.' }])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -58,6 +106,8 @@ export default function ChatPage({ params }: { params: Promise<{ repo: string }>
       handleSend()
     }
   }
+
+  const repoName = repoDetails?.github_url.split('/').pop() || 'Loading...'
 
   return (
     <div className="min-h-screen bg-background">
@@ -78,26 +128,16 @@ export default function ChatPage({ params }: { params: Promise<{ repo: string }>
               <div className="relative">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-semibold rounded border border-primary/20 uppercase tracking-wider">Active</span>
-                  <span className="text-on-surface-variant text-xs">v2.4.1-stable</span>
+                  <span className="text-on-surface-variant text-xs">v1.0.0</span>
                 </div>
-                <h2 className="text-2xl font-bold text-on-surface mb-2">{repo}</h2>
-                <p className="text-sm text-on-surface-variant max-w-lg">
-                  Microservices architecture handling high-concurrency transactional data with event-sourcing and distributed locking.
-                </p>
+                <h2 className="text-2xl font-bold text-on-surface mb-2">{repoName}</h2>
                 <div className="flex gap-6 mt-4">
                   <div>
                     <p className="text-xs text-on-surface-variant mb-1">Languages</p>
                     <div className="flex items-center gap-2 text-xs">
                       <div className="w-2 h-2 rounded-full bg-[#3178c6]" />
-                      <span>TypeScript</span>
-                      <div className="w-2 h-2 rounded-full bg-[#f1e05a] ml-2" />
-                      <span>JavaScript</span>
+                      <span>{repoDetails?.language || 'Unknown'}</span>
                     </div>
-                  </div>
-                  <div className="w-px h-8 bg-outline-variant" />
-                  <div>
-                    <p className="text-xs text-on-surface-variant mb-1">Last Indexed</p>
-                    <p className="text-xs font-medium">2 hours ago</p>
                   </div>
                 </div>
               </div>
@@ -107,10 +147,10 @@ export default function ChatPage({ params }: { params: Promise<{ repo: string }>
               <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-4">Insight Metrics</p>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Health Score', value: '94%', color: 'text-primary' },
-                  { label: 'Coverage', value: '82%', color: 'text-primary' },
-                  { label: 'Complexity', value: 'Medium', color: 'text-secondary' },
-                  { label: 'Maintainability', value: 'A+', color: 'text-secondary' },
+                  { label: 'Health Score', value: 'AI Native', color: 'text-primary' },
+                  { label: 'Vector Engine', value: 'pgvector', color: 'text-primary' },
+                  { label: 'Complexity', value: 'Unknown', color: 'text-secondary' },
+                  { label: 'Maintainability', value: 'AI', color: 'text-secondary' },
                 ].map((m) => (
                   <motion.div
                     key={m.label}
@@ -148,106 +188,36 @@ export default function ChatPage({ params }: { params: Promise<{ repo: string }>
                         <span className="material-symbols-outlined text-primary text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
                       </div>
                     )}
-                    <div className={`max-w-2xl p-4 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
+                    <div className={`max-w-2xl p-4 rounded-2xl text-sm leading-relaxed prose prose-sm prose-invert prose-primary ${msg.role === 'user'
                       ? 'bg-surface-container-highest rounded-tr-none border border-outline-variant/50'
                       : 'bg-surface-container rounded-tl-none border border-outline-variant/30'
                     }`}>
                       {msg.role === 'user' ? (
                         <p>{msg.content}</p>
                       ) : (
-                        <div className="space-y-4">
-                          <h4 className="text-primary font-semibold text-base">Authentication Implementation</h4>
-                          <p className="text-on-surface-variant">
-                            The authentication system leverages a <strong className="text-on-surface">JWT-based Stateless Flow</strong> with an asymmetric signing strategy (RSA-256). The frontend communicates with a centralized{' '}
-                            <code className="bg-surface-container-high px-1.5 py-0.5 rounded text-primary font-mono text-xs">AuthService</code> which acts as the identity provider.
-                          </p>
-
-                          {/* Architecture diagram */}
-                          <div className="p-4 bg-surface-container-lowest rounded-xl border border-outline-variant mermaid-bg overflow-x-auto">
-                            <div className="flex items-center justify-center gap-3 min-w-[480px]">
-                              {['Frontend', 'API Gateway', 'Auth Service', 'Redis / DB'].map((node, idx, arr) => (
-                                <div key={node} className="flex items-center gap-3">
-                                  <div className="px-3 py-2 bg-surface-container-high border border-outline-variant/50 rounded-lg text-center">
-                                    <p className="text-xs font-medium text-on-surface">{node}</p>
-                                  </div>
-                                  {idx < arr.length - 1 && (
-                                    <span className="material-symbols-outlined text-outline text-[18px]">arrow_forward</span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                            <p className="text-center text-[11px] text-on-surface-variant mt-3 italic">Figure 1.0: Authentication request lifecycle</p>
-                          </div>
-
-                          {/* Code block */}
-                          <div className="rounded-xl bg-[#010409] border border-outline-variant overflow-hidden">
-                            <div className="flex items-center justify-between px-4 py-2 bg-surface-container-high border-b border-outline-variant">
-                              <span className="text-xs text-on-surface-variant font-mono">auth.middleware.ts</span>
-                              <button className="text-xs text-primary hover:text-primary-fixed flex items-center gap-1">
-                                <span className="material-symbols-outlined text-[14px]">content_copy</span>
-                                Copy
-                              </button>
-                            </div>
-                            <pre className="p-4 text-xs font-mono text-[#d1d5db] overflow-x-auto leading-relaxed">
-                              <code>{`export const validateToken = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) throw new UnauthorizedException();
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = payload;
-    next();
-  } catch (err) {
-    throw new TokenExpiredException();
-  }
-};`}</code>
-                            </pre>
-                          </div>
-
-                          {/* Suggestion chips */}
-                          <div className="flex gap-2 flex-wrap">
-                            {['Explain token refresh logic', 'Show RBAC implementation', 'Compare with OAuth'].map((chip) => (
-                              <motion.button
-                                key={chip}
-                                whileHover={{ scale: 1.03, borderColor: 'rgba(173,198,255,0.5)' }}
-                                whileTap={{ scale: 0.97 }}
-                                onClick={() => setInputValue(chip)}
-                                className="px-3 py-1.5 rounded-full bg-surface-container border border-outline-variant text-xs text-on-surface-variant hover:text-primary transition-all"
-                              >
-                                {chip}
-                              </motion.button>
-                            ))}
-                          </div>
-                        </div>
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
                       )}
                     </div>
                   </motion.div>
                 ))}
               </AnimatePresence>
+              {isLoading && (
+                <div className="flex justify-start items-start gap-4">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-1">
+                    <span className="material-symbols-outlined text-primary text-[16px] animate-spin" style={{ fontVariationSettings: "'FILL' 1" }}>sync</span>
+                  </div>
+                  <div className="bg-surface-container rounded-tl-none border border-outline-variant/30 max-w-2xl p-4 rounded-2xl text-sm text-on-surface-variant flex gap-1">
+                    <span className="animate-bounce">.</span>
+                    <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
+                    <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+                  </div>
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Artifact download bar */}
-            <div className="px-6 py-3 bg-surface-container-low border-y border-outline-variant/30 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-                <span className="material-symbols-outlined text-primary text-[18px]">cloud_download</span>
-                Suggested artifacts:
-              </div>
-              <div className="flex gap-2">
-                {[{ icon: 'description', label: 'Architecture.md' }, { icon: 'picture_as_pdf', label: 'Overview.pdf' }].map((a) => (
-                  <motion.button
-                    key={a.label}
-                    whileHover={{ scale: 1.03 }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container border border-outline-variant rounded-lg text-xs hover:border-primary/30 transition-all"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">{a.icon}</span>
-                    {a.label}
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-
             {/* Input area */}
-            <div className="p-4">
+            <div className="p-4 border-t border-outline-variant/30">
               <div className="relative max-w-4xl mx-auto">
                 <motion.div
                   animate={{ boxShadow: isFocused ? '0 0 0 1px rgba(173,198,255,0.3), 0 0 20px rgba(173,198,255,0.1)' : '0 0 0 0px transparent' }}
@@ -268,31 +238,27 @@ export default function ChatPage({ params }: { params: Promise<{ repo: string }>
                     onKeyDown={handleKeyDown}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
+                    disabled={isLoading}
                   />
                   <div className="flex items-center justify-between px-3 pb-2">
                     <div className="flex gap-1">
                       <button className="p-1.5 text-on-surface-variant hover:text-primary transition-colors">
                         <span className="material-symbols-outlined text-[18px]">attach_file</span>
                       </button>
-                      <button className="p-1.5 text-on-surface-variant hover:text-primary transition-colors">
-                        <span className="material-symbols-outlined text-[18px]">code</span>
-                      </button>
                     </div>
                     <ShimmerButton
                       onClick={handleSend}
-                      className="px-4 py-1.5 text-xs font-semibold rounded-xl"
+                      disabled={isLoading || !inputValue.trim()}
+                      className="px-4 py-1.5 text-xs font-semibold rounded-xl disabled:opacity-50"
                       shimmerColor="#adc6ff"
                       borderRadius="10px"
                       background="rgba(0,46,106,1)"
                     >
-                      Analyze
-                      <span className="material-symbols-outlined text-[16px]">send</span>
+                      {isLoading ? 'Thinking...' : 'Analyze'}
+                      {!isLoading && <span className="material-symbols-outlined text-[16px]">send</span>}
                     </ShimmerButton>
                   </div>
                 </motion.div>
-                <p className="text-center text-[11px] text-on-surface-variant/40 mt-2">
-                  AI may produce inaccuracies. Verify critical architectural findings.
-                </p>
               </div>
             </div>
           </motion.section>

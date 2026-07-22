@@ -43,19 +43,25 @@ export class AiService {
    * Answers a query using context chunks.
    */
   async generateAnswer(query: string, contextChunks: string[]): Promise<string> {
-    const prompt = `You are a helpful software engineering assistant answering questions about a codebase.
-Use the following code chunks as context to answer the user's question.
-If the answer is not contained in the context, say that you don't have enough information.
+    try {
+      const contextText = contextChunks.join('\n\n---\n\n');
+      
+      const prompt = `
+You are an expert AI software architect and senior engineer. 
+Answer the user's question based strictly on the provided codebase context.
+Format your entire response using Github Flavored Markdown. 
+Use rich markdown elements like code blocks (\`\`\`), tables, lists, and bold text to structure your answer beautifully and make it easy to read.
 
-Context:
-${contextChunks.join('\n\n---\n\n')}
+Context from the repository:
+${contextText}
 
 Question: ${query}
-`;
 
-    try {
+Expert Answer (in Markdown):
+      `;
+
       const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-1.5-flash',
         contents: prompt,
       });
 

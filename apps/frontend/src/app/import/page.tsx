@@ -35,6 +35,7 @@ export default function ImportPage() {
   const [url, setUrl] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
   const [progressVisible, setProgressVisible] = useState(false)
+  const [importedRepoId, setImportedRepoId] = useState<string | null>(null)
   const [step1, setStep1] = useState<StepState>('idle')
   const [step2, setStep2] = useState<StepState>('idle')
   const [step3, setStep3] = useState<StepState>('idle')
@@ -61,6 +62,8 @@ export default function ImportPage() {
       });
       const data = await res.json();
       const repoId = data.repositoryId;
+      // We will save it in state to use it in the button redirect
+      setImportedRepoId(repoId);
 
       setStep1('done');
       setStep2('active');
@@ -172,7 +175,7 @@ export default function ImportPage() {
                   </div>
                   {done ? (
                     <ShimmerButton
-                      onClick={() => router.push('/repos/nest-booking-api')}
+                      onClick={() => router.push(`/repos/${importedRepoId}`)}
                       className="h-14 px-6 text-sm font-semibold rounded-xl whitespace-nowrap"
                       shimmerColor="#adc6ff"
                       borderRadius="12px"
@@ -266,7 +269,7 @@ export default function ImportPage() {
                           </div>
                           <br />
                           <ShimmerButton
-                            onClick={() => router.push('/repos/nest-booking-api')}
+                            onClick={() => router.push(`/repos/${importedRepoId}`)}
                             className="mt-2 px-8 py-3 text-sm font-semibold rounded-xl"
                             shimmerColor="#adc6ff"
                             borderRadius="12px"
