@@ -5,7 +5,7 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["@nestjs/microservices", "@nestjs/websockets"]
+  external_node_modules = ["@nestjs/microservices", "@nestjs/websockets", "class-validator", "class-transformer"]
 
 [[redirects]]
   from = "/*"
