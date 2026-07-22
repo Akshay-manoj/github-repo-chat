@@ -7,6 +7,9 @@ export class AiService {
   private ai: GoogleGenAI;
 
   constructor() {
+    if (!process.env.GEMINI_API_KEY) {
+      this.logger.error('GEMINI_API_KEY is missing from environment variables! AI features will fail.');
+    }
     // Requires GEMINI_API_KEY environment variable
     this.ai = new GoogleGenAI({});
   }
