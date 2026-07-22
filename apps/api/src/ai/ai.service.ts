@@ -20,7 +20,7 @@ export class AiService {
   async generateEmbedding(text: string): Promise<number[]> {
     try {
       const response = await this.ai.models.embedContent({
-        model: 'gemini-embedding-2',
+        model: 'gemini-3.6-flash',
         contents: text,
         config: {
           outputDimensionality: 768,
@@ -45,7 +45,7 @@ export class AiService {
   async generateAnswer(query: string, contextChunks: string[]): Promise<string> {
     try {
       const contextText = contextChunks.join('\n\n---\n\n');
-      
+
       const prompt = `
 You are an expert AI software architect and senior engineer. 
 Answer the user's question based strictly on the provided codebase context.
