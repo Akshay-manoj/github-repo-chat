@@ -20,5 +20,10 @@ async function bootstrap() {
 
 export const handler: Handler = async (event, context) => {
   const server = await bootstrap();
-  return server(event, context) as any;
+  const serverlessEvent = {
+    ...event,
+    requestContext: (event as any).requestContext || {},
+  };
+  return server(serverlessEvent, context) as any;
 };
+
