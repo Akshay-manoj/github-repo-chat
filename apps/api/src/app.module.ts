@@ -14,6 +14,10 @@ import { BullModule } from '@nestjs/bullmq';
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        password: process.env.REDIS_PASSWORD,
+        // If connecting to a managed Redis that requires TLS (like Render's external connection),
+        // uncomment the tls object below:
+        // tls: process.env.NODE_ENV === 'production' ? {} : undefined,
       },
     }),
     RepositoriesModule,
