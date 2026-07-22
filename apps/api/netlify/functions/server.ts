@@ -8,11 +8,36 @@ import { Handler } from '@netlify/functions';
 
 let cachedServer: Handler;
 
+import { Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+
+@Catch()
+export class AllExceptionsFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse();
+    
+    console.error('NestJS Exception:', exception);
+    
+    const status =
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    response.status(status).json({
+      statusCode: status,
+      timestamp: new Date().toISOString(),
+      error: exception instanceof Error ? exception.message : String(exception),
+      stack: exception instanceof Error ? exception.stack : undefined,
+    });
+  }
+}
+
 async function bootstrap() {
   if (!cachedServer) {
     const expressApp = express();
     const nestApp = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
     nestApp.enableCors();
+    nestApp.useGlobalFilters(new AllExceptionsFilter());
     await nestApp.init();
     cachedServer = serverlessExpress({ app: expressApp });
   }
