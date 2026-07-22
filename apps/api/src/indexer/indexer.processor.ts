@@ -7,6 +7,7 @@ import * as path from 'path';
 import simpleGit from 'simple-git';
 
 import { ParserService } from '../parser/parser.service';
+import { AiService } from '../ai/ai.service';
 import * as crypto from 'crypto';
 
 @Processor('repository-index-queue')
@@ -16,6 +17,7 @@ export class IndexerProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parser: ParserService,
+    private readonly aiService: AiService,
   ) {
     super();
   }
@@ -62,14 +64,15 @@ export class IndexerProcessor extends WorkerHost {
           },
         });
 
-        // Save chunk (Embeddings will be added in Phase 3)
-        await this.prisma.chunk.create({
-          data: {
-            file_id: file.id,
-            chunk_text: chunk.content,
-            // embedding is omitted, will be added by embeddings background job or directly in Phase 3
-          }
-        });
+        // Generate Gemini Embedding for this chunk
+        const embedding = await this.aiService.generateEmbedding(chunk.content);
+        const embeddingStr = `[${embedding.join(',')}]`;
+
+        // Save chunk with pgvector embedding (Prisma raw query needed for vector type)
+        await this.prisma.$executeRawUnsafe(`
+          INSERT INTO "Chunk" (id, file_id, chunk_text, embedding, created_at)
+          VALUES (gen_random_uuid(), $1, $2, $3::vector, NOW())
+        `, file.id, chunk.content, embeddingStr);
       }
 
       // Update repository status in DB

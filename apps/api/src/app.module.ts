@@ -5,6 +5,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RepositoriesModule } from './repositories/repositories.module';
 import { IndexerModule } from './indexer/indexer.module';
 import { ParserModule } from './parser/parser.module';
+import { AiModule } from './ai/ai.module';
+import { SearchModule } from './search/search.module';
 import { BullModule } from '@nestjs/bullmq';
 
 @Module({
@@ -23,6 +25,8 @@ import { BullModule } from '@nestjs/bullmq';
     RepositoriesModule,
     IndexerModule,
     ParserModule,
+    AiModule,
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [AppService],
