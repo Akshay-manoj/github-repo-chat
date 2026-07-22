@@ -43,23 +43,55 @@ export default function ImportPage() {
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
   const handleAnalyze = async () => {
-    if (!url.trim()) return
-    setAnalyzing(true)
-    setProgressVisible(true)
-    setStep1('active')
-    setProgressWidth('0%')
-    await sleep(2500)
-    setStep1('done')
-    setStep2('active')
-    setProgressWidth('50%')
-    await sleep(3500)
-    setStep2('done')
-    setStep3('active')
-    setProgressWidth('100%')
-    await sleep(2000)
-    setStep3('done')
-    setDone(true)
+    if (!url.trim()) return;
+    setAnalyzing(true);
+    setProgressVisible(true);
+    setStep1('active');
+    setProgressWidth('0%');
+
+    try {
+      // Trigger Import
+      const res = await fetch(`${API_URL}/repositories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ githubUrl: url }),
+      });
+      const data = await res.json();
+      const repoId = data.repositoryId;
+
+      setStep1('done');
+      setStep2('active');
+      setProgressWidth('33%');
+
+      // Simple polling for AST parsing completion
+      let isIndexed = false;
+      while (!isIndexed) {
+        await sleep(2000);
+        const statusRes = await fetch(`${API_URL}/repositories/${repoId}`);
+        const statusData = await statusRes.json();
+        
+        if (statusData?.indexed_at) {
+          isIndexed = true;
+          setStep2('done');
+          setStep3('active');
+          setProgressWidth('66%');
+          
+          // Wait a bit to simulate embedding generation phase
+          await sleep(1500);
+          setStep3('done');
+          setProgressWidth('100%');
+          setDone(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error importing repository:', error);
+      // Fallback or error state handling could go here
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   const stepClass = (state: StepState) => {
