@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
-import { AppModule } from '../../src/app.module';
+// @ts-ignore - this is compiled during the netlify build step before bundling
+import { AppModule } from '../../dist/app.module';
 import express from 'express';
 import serverlessExpress from '@vendia/serverless-express';
 import { Handler } from '@netlify/functions';
