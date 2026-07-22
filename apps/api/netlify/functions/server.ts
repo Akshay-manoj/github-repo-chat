@@ -1,8 +1,6 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
-// @ts-ignore - this is compiled during the netlify build step before bundling
-import { AppModule } from '../../dist/app.module';
 import express from 'express';
 import serverlessExpress from '@vendia/serverless-express';
 import { Handler } from '@netlify/functions';
@@ -36,6 +34,8 @@ export class AllExceptionsFilter {
 async function bootstrap() {
   if (!cachedServer) {
     const expressApp = express();
+    // @ts-ignore
+    const { AppModule } = require('../../dist/app.module');
     const nestApp = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
     nestApp.enableCors();
     nestApp.useGlobalFilters(new AllExceptionsFilter());
