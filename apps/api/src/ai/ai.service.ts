@@ -20,7 +20,7 @@ export class AiService {
   async generateEmbedding(text: string): Promise<number[]> {
     try {
       const response = await this.ai.models.embedContent({
-        model: 'text-embedding-004',
+        model: 'gemini-embedding-2',
         contents: text,
       });
 
