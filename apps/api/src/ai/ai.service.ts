@@ -22,6 +22,9 @@ export class AiService {
       const response = await this.ai.models.embedContent({
         model: 'gemini-embedding-2',
         contents: text,
+        config: {
+          outputDimensionality: 768,
+        },
       });
 
       const embeddings = response.embeddings;
