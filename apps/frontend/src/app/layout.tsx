@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import CommandPaletteLoader from '@/components/CommandPaletteLoader'
 
 export const metadata: Metadata = {
   title: 'RepoInsight - GitHub Repository AI Explorer',
@@ -23,7 +24,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <CommandPaletteLoader />
+      </body>
     </html>
   )
 }

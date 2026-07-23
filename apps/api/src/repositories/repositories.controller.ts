@@ -30,4 +30,9 @@ export class RepositoriesController {
   async getRepository(@Param('id') id: string) {
     return this.repositoriesService.getRepository(id);
   }
+
+  @Get(':id/files')
+  async getRepositoryFiles(@Param('id') id: string) {
+    return this.repositoriesService.getRepositoryFiles(id);
+  }
 }

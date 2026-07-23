@@ -58,4 +58,16 @@ export class RepositoriesService {
       orderBy: { created_at: 'desc' },
     });
   }
+
+  async getRepositoryFiles(id: string) {
+    return this.prisma.file.findMany({
+      where: { repository_id: id },
+      select: {
+        id: true,
+        path: true,
+        _count: { select: { chunks: true } },
+      },
+      orderBy: { path: 'asc' },
+    });
+  }
 }

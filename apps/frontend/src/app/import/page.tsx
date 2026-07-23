@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import Sidebar from '@/components/Sidebar'
@@ -30,9 +30,47 @@ const features = [
   },
 ]
 
+// Terminal log lines keyed by step
+const LOG_LINES: Record<number, string[]> = {
+  0: [
+    '> git clone <url> --depth=1',
+    '  Cloning into temporary workspace...',
+    '  remote: Enumerating objects: done.',
+    '  Receiving objects: 100% (412/412)',
+    '  Resolving deltas: 100% (88/88)',
+    '✓ Clone complete',
+  ],
+  1: [
+    '> Scanning repository structure...',
+    '  Found 312 source files',
+    '  Parsing TypeScript AST...',
+    '  Building dependency graph...',
+    '  Extracting symbols & exports...',
+    '✓ AST parsing complete',
+  ],
+  2: [
+    '> Chunking parsed code...',
+    '  Generating vector embeddings...',
+    '  Indexing into pgvector...',
+    '  Building semantic index...',
+    '✓ Knowledge base ready',
+  ],
+}
+
+function ConfettiParticle({ x, color }: { x: number; color: string }) {
+  return (
+    <div
+      className="confetti-particle"
+      style={{ left: `${x}%`, top: 0, background: color, animationDelay: `${Math.random() * 0.4}s` }}
+    />
+  )
+}
+
 export default function ImportPage() {
   const router = useRouter()
   const [url, setUrl] = useState('')
+  const [urlError, setUrlError] = useState('')
+  const [urlShake, setUrlShake] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [progressVisible, setProgressVisible] = useState(false)
   const [importedRepoId, setImportedRepoId] = useState<string | null>(null)
@@ -41,59 +79,103 @@ export default function ImportPage() {
   const [step3, setStep3] = useState<StepState>('idle')
   const [progressWidth, setProgressWidth] = useState('0%')
   const [done, setDone] = useState(false)
+  const [currentStep, setCurrentStep] = useState(-1)
+  const [visibleLogs, setVisibleLogs] = useState<string[]>([])
+  const [confetti, setConfetti] = useState(false)
+  const logRef = useRef<HTMLDivElement>(null)
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  // Stream log lines for a given step
+  const streamLogs = useCallback(async (step: number) => {
+    setCurrentStep(step)
+    const lines = LOG_LINES[step] || []
+    for (const line of lines) {
+      await sleep(320)
+      setVisibleLogs((prev) => [...prev, line])
+    }
+  }, [])
+
+  // Auto-scroll logs
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight
+    }
+  }, [visibleLogs])
+
+  const validateUrl = (value: string) => {
+    if (!value.startsWith('https://github.com/')) {
+      return 'Please enter a valid GitHub URL (https://github.com/...)'
+    }
+    return ''
+  }
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      setUrl(text)
+      setUrlError('')
+    } catch {
+      // clipboard access denied
+    }
+  }
 
   const handleAnalyze = async () => {
-    if (!url.trim()) return;
-    setAnalyzing(true);
-    setProgressVisible(true);
-    setStep1('active');
-    setProgressWidth('0%');
+    const err = validateUrl(url.trim())
+    if (!url.trim() || err) {
+      setUrlError(err || 'Please enter a GitHub URL')
+      setUrlShake(true)
+      setTimeout(() => setUrlShake(false), 500)
+      return
+    }
+    setUrlError('')
+    setAnalyzing(true)
+    setProgressVisible(true)
+    setStep1('active')
+    setProgressWidth('0%')
+    setVisibleLogs([])
 
     try {
-      // Trigger Import
+      streamLogs(0)
       const res = await fetch(`${API_URL}/repositories`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ githubUrl: url }),
-      });
-      const data = await res.json();
-      const repoId = data.repositoryId;
-      // We will save it in state to use it in the button redirect
-      setImportedRepoId(repoId);
+      })
+      const data = await res.json()
+      const repoId = data.repositoryId
+      setImportedRepoId(repoId)
 
-      setStep1('done');
-      setStep2('active');
-      setProgressWidth('33%');
+      setStep1('done')
+      setStep2('active')
+      setProgressWidth('33%')
+      streamLogs(1)
 
-      // Simple polling for AST parsing completion
-      let isIndexed = false;
+      let isIndexed = false
       while (!isIndexed) {
-        await sleep(2000);
-        const statusRes = await fetch(`${API_URL}/repositories/${repoId}`);
-        const statusData = await statusRes.json();
-        
+        await sleep(2000)
+        const statusRes = await fetch(`${API_URL}/repositories/${repoId}`)
+        const statusData = await statusRes.json()
+
         if (statusData?.indexed_at) {
-          isIndexed = true;
-          setStep2('done');
-          setStep3('active');
-          setProgressWidth('66%');
-          
-          // Wait a bit to simulate embedding generation phase
-          await sleep(1500);
-          setStep3('done');
-          setProgressWidth('100%');
-          setDone(true);
+          isIndexed = true
+          setStep2('done')
+          setStep3('active')
+          setProgressWidth('66%')
+          await streamLogs(2)
+          await sleep(500)
+          setStep3('done')
+          setProgressWidth('100%')
+          setDone(true)
+          setConfetti(true)
+          setTimeout(() => setConfetti(false), 1800)
         }
       }
     } catch (error) {
-      console.error('Error importing repository:', error);
-      // Fallback or error state handling could go here
+      console.error('Error importing repository:', error)
     } finally {
-      setAnalyzing(false);
+      setAnalyzing(false)
     }
   }
 
@@ -103,13 +185,15 @@ export default function ImportPage() {
     return 'border-outline-variant bg-surface-container'
   }
 
+  const confettiColors = ['#adc6ff', '#4d8eff', '#b9c8de', '#dae2fd', '#39485a']
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar activeItem="repositories" />
       <TopBar activeNav="explorer" />
 
-      <main className="ml-64 pt-16 min-h-screen relative overflow-hidden">
-        {/* BackgroundBeams only on the hero section */}
+      <main className="ml-64 pt-16 min-h-screen relative overflow-hidden transition-all duration-300">
+        {/* BackgroundBeams */}
         <div className="absolute inset-0 pointer-events-none">
           <BackgroundBeams />
         </div>
@@ -158,21 +242,36 @@ export default function ImportPage() {
             <div className="relative">
               <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 rounded-2xl blur-sm" />
               <div className="relative bg-surface-container-low/80 backdrop-blur-md border border-outline-variant/40 rounded-2xl p-8">
-                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-4 block">
-                  Repository URL
-                </label>
+                <div className="flex items-center justify-between mb-4">
+                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest">
+                    Repository URL
+                  </label>
+                  <button
+                    onClick={handlePaste}
+                    className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                    title="Paste from clipboard"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">content_paste</span>
+                    Paste
+                  </button>
+                </div>
 
-                <div className="flex gap-4">
+                <div className={`flex gap-4 ${urlShake ? 'animate-shake' : ''}`}>
                   <div className="relative flex-1">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">link</span>
                     <input
-                      className="w-full h-14 bg-surface-container-lowest border border-outline-variant rounded-xl pl-12 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-all"
+                      className={`w-full h-14 bg-surface-container-lowest border rounded-xl pl-12 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-1 transition-all ${
+                        urlError
+                          ? 'border-error/60 focus:border-error/80 focus:ring-error/20'
+                          : 'border-outline-variant focus:border-primary/60 focus:ring-primary/20'
+                      }`}
                       placeholder="https://github.com/username/repository"
                       type="text"
                       value={url}
-                      onChange={(e) => setUrl(e.target.value)}
+                      onChange={(e) => { setUrl(e.target.value); setUrlError('') }}
                     />
                   </div>
+
                   {done ? (
                     <ShimmerButton
                       onClick={() => router.push(`/repos/${importedRepoId}`)}
@@ -211,6 +310,21 @@ export default function ImportPage() {
                   )}
                 </div>
 
+                {/* Inline URL error */}
+                <AnimatePresence>
+                  {urlError && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="text-error text-xs mt-2 ml-1 flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">error</span>
+                      {urlError}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+
                 {/* Progress */}
                 <AnimatePresence>
                   {progressVisible && (
@@ -220,8 +334,8 @@ export default function ImportPage() {
                       exit={{ opacity: 0, height: 0 }}
                       className="mt-10"
                     >
-                      {/* Progress bar */}
-                      <div className="relative mb-10">
+                      {/* Step indicator */}
+                      <div className="relative mb-6">
                         <div className="absolute top-5 left-0 w-full h-[2px] bg-outline-variant/50" />
                         <motion.div
                           className="absolute top-5 left-0 h-[2px] bg-primary shadow-[0_0_10px_rgba(173,198,255,0.8)]"
@@ -257,6 +371,51 @@ export default function ImportPage() {
                         </div>
                       </div>
 
+                      {/* Terminal log panel */}
+                      <AnimatePresence>
+                        {visibleLogs.length > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mb-6"
+                          >
+                            <div ref={logRef} className="terminal-log custom-scrollbar">
+                              {visibleLogs.map((line, i) => (
+                                <motion.div
+                                  key={i}
+                                  initial={{ opacity: 0, x: -6 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className={
+                                    line.startsWith('✓') ? 'log-done' :
+                                    line.startsWith('>') ? 'log-warn' : 'log-info'
+                                  }
+                                >
+                                  {line}
+                                </motion.div>
+                              ))}
+                              {analyzing && (
+                                <span className="log-dim animate-pulse">█</span>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Confetti burst */}
+                      {confetti && (
+                        <div className="relative h-1 overflow-visible">
+                          {Array.from({ length: 20 }).map((_, i) => (
+                            <ConfettiParticle
+                              key={i}
+                              x={10 + Math.random() * 80}
+                              color={confettiColors[i % confettiColors.length]}
+                            />
+                          ))}
+                        </div>
+                      )}
+
                       {done && (
                         <motion.div
                           initial={{ opacity: 0, y: 10 }}
@@ -265,7 +424,7 @@ export default function ImportPage() {
                         >
                           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/30 text-primary text-sm font-medium mb-4">
                             <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                            Analysis Complete
+                            Analysis Complete — Repository Ready
                           </div>
                           <br />
                           <ShimmerButton

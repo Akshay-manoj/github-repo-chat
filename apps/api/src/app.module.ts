@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -11,15 +12,32 @@ import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
     PrismaModule,
-    BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379', 10),
-        password: process.env.REDIS_PASSWORD,
-        // If connecting to a managed Redis that requires TLS (like Render's external connection),
-        // uncomment the tls object below:
-        // tls: process.env.NODE_ENV === 'production' ? {} : undefined,
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('REDIS_URL');
+        if (redisUrl) {
+          return {
+            connection: {
+              url: redisUrl,
+              family: 4,
+            },
+          };
+        }
+
+        return {
+          connection: {
+            host: configService.get<string>('REDIS_HOST') || 'localhost',
+            port: parseInt(configService.get<string>('REDIS_PORT') || '6379', 10),
+            password: configService.get<string>('REDIS_PASSWORD'),
+            family: 4,
+          },
+        };
       },
     }),
     RepositoriesModule,

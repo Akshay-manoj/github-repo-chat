@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import { motion, useMotionValue, useSpring } from 'framer-motion'
 import { Spotlight } from '@/components/aceternity/Spotlight'
 import { TextGenerateEffect } from '@/components/aceternity/TextGenerateEffect'
 import { ShimmerButton } from '@/components/aceternity/ShimmerButton'
@@ -10,6 +10,24 @@ import { ShimmerButton } from '@/components/aceternity/ShimmerButton'
 export default function LoginPage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'sent'>('idle')
   const [email, setEmail] = useState('')
+
+  // Mouse-tracking orb
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+  const springX = useSpring(mouseX, { stiffness: 60, damping: 20 })
+  const springY = useSpring(mouseY, { stiffness: 60, damping: 20 })
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      mouseX.set(e.clientX - rect.left - rect.width / 2)
+      mouseY.set(e.clientY - rect.top - rect.height / 2)
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -19,8 +37,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background antialiased relative overflow-hidden">
-      {/* Aceternity Spotlight */}
+    <div
+      ref={containerRef}
+      className="min-h-screen w-full flex items-center justify-center bg-background antialiased relative overflow-hidden"
+    >
+      {/* Mouse-tracking blob orb */}
+      <motion.div
+        style={{ x: springX, y: springY }}
+        className="absolute pointer-events-none z-0"
+      >
+        <div className="w-[600px] h-[600px] rounded-full bg-primary/5 blur-[120px] animate-float-orb" />
+      </motion.div>
+
+      {/* Static accents */}
       <Spotlight className="-top-40 left-0 md:left-60 md:-top-20" fill="#adc6ff" />
       <Spotlight className="top-1/4 right-0" fill="#4d8eff" />
 
@@ -50,14 +79,18 @@ export default function LoginPage() {
           transition={{ delay: 0.2, duration: 0.5 }}
           className="flex flex-col items-center mb-10"
         >
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(173,198,255,0.2)]">
+          <motion.div
+            whileHover={{ scale: 1.08, rotate: 6 }}
+            transition={{ type: 'spring', stiffness: 300 }}
+            className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(173,198,255,0.2)] cursor-pointer"
+          >
             <span
               className="material-symbols-outlined text-primary text-[36px]"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >
               explore
             </span>
-          </div>
+          </motion.div>
 
           <TextGenerateEffect
             words="GitHub Repository AI Explorer"
@@ -154,14 +187,18 @@ export default function LoginPage() {
               {/* GitHub */}
               <Link href="/import">
                 <motion.button
-                  whileHover={{ scale: 1.01 }}
+                  whileHover={{ scale: 1.01, borderColor: 'rgba(173,198,255,0.4)', boxShadow: '0 0 20px rgba(173,198,255,0.08)' }}
                   whileTap={{ scale: 0.98 }}
                   type="button"
-                  className="w-full h-12 bg-surface-container-high border border-outline-variant/40 rounded-xl text-sm font-medium text-on-surface flex items-center justify-center gap-3 hover:border-primary/30 hover:bg-surface-container-highest transition-all"
+                  className="w-full h-12 bg-surface-container-high border border-outline-variant/40 rounded-xl text-sm font-medium text-on-surface flex items-center justify-center gap-3 transition-all group"
                 >
-                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                  <motion.svg
+                    className="w-5 h-5 fill-current transition-transform"
+                    whileHover={{ rotate: 15 }}
+                    viewBox="0 0 24 24"
+                  >
                     <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.43.372.823 1.102.823 2.222 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-                  </svg>
+                  </motion.svg>
                   <span>Continue with GitHub</span>
                 </motion.button>
               </Link>
@@ -183,11 +220,17 @@ export default function LoginPage() {
           transition={{ delay: 1 }}
           className="flex justify-center gap-6 mt-8"
         >
-          {['SOC 2 Compliant', 'SSO Support', 'GDPR Ready'].map((badge) => (
-            <div key={badge} className="flex items-center gap-1.5 text-xs text-on-surface-variant/60">
+          {['SOC 2 Compliant', 'SSO Support', 'GDPR Ready'].map((badge, i) => (
+            <motion.div
+              key={badge}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.1 + i * 0.1 }}
+              className="flex items-center gap-1.5 text-xs text-on-surface-variant/60"
+            >
               <span className="material-symbols-outlined text-primary text-[14px]">verified</span>
               {badge}
-            </div>
+            </motion.div>
           ))}
         </motion.div>
       </motion.div>

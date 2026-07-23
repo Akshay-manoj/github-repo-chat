@@ -9,18 +9,17 @@ export class SearchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
-  ) {}
+  ) { }
 
   async searchRepository(repositoryId: string, query: string): Promise<any> {
     try {
-      this.logger.log(`Searching repository ${repositoryId} for query: ${query}`);
+      this.logger.log(`Searching repository ${repositoryId} for: "${query}"`);
 
       // 1. Generate embedding for user query
       const queryEmbedding = await this.aiService.generateEmbedding(query);
       const embeddingStr = `[${queryEmbedding.join(',')}]`;
 
-      // 2. Perform vector search using pgvector
-      // We use raw SQL because Prisma doesn't have native ORM methods for pgvector operators yet
+      // 2. Vector search — retrieve top 12 chunks below distance threshold 0.8
       const nearestChunks = await this.prisma.$queryRawUnsafe<any[]>(`
         SELECT
           c.id,
@@ -31,31 +30,31 @@ export class SearchService {
         JOIN "File" f ON c.file_id = f.id
         WHERE f.repository_id = $2
           AND c.embedding IS NOT NULL
+          AND c.embedding <-> $1::vector < 0.8
         ORDER BY distance ASC
-        LIMIT 5;
+        LIMIT 12;
       `, embeddingStr, repositoryId);
 
       if (nearestChunks.length === 0) {
         return {
-          answer: "I couldn't find any relevant code snippets in this repository.",
+          answer: "I couldn't find any relevant code in this repository for that question. Try rephrasing or asking about a specific file or function name.",
           references: [],
         };
       }
 
-      // 3. Extract text from the nearest chunks
-      const contextChunks = nearestChunks.map(chunk => 
-        `File: ${chunk.path}\nCode:\n${chunk.chunk_text}`
+      // 3. Format context — include file path for attribution
+      const contextChunks = nearestChunks.map(chunk =>
+        `### File: ${chunk.path}\n\`\`\`\n${chunk.chunk_text}\n\`\`\``
       );
 
-      // 4. Generate answer using Gemini
+      // 4. Generate grounded answer
       const answer = await this.aiService.generateAnswer(query, contextChunks);
 
-      // 5. Return the final payload
       return {
         answer,
         references: nearestChunks.map(c => ({
           path: c.path,
-          distance: c.distance,
+          distance: Number(c.distance),
         })),
       };
     } catch (error) {

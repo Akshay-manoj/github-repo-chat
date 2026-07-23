@@ -16,12 +16,44 @@ interface SectionDef {
   query: string
 }
 
+type SectionStatus = 'idle' | 'loading' | 'loaded' | 'error'
+
+function SkeletonBlock() {
+  return (
+    <div className="space-y-3 py-4">
+      {[90, 70, 85, 55, 75, 60].map((w, i) => (
+        <div key={i} className="skeleton h-4" style={{ width: `${w}%` }} />
+      ))}
+      <div className="skeleton h-4 w-1/3" />
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: SectionStatus }) {
+  const configs: Record<SectionStatus, { label: string; color: string; dot: string }> = {
+    idle:    { label: 'Not loaded', color: 'text-on-surface-variant border-outline-variant/40 bg-transparent', dot: 'bg-outline' },
+    loading: { label: 'Loading…',   color: 'text-primary border-primary/30 bg-primary/5',         dot: 'bg-primary animate-pulse' },
+    loaded:  { label: 'Loaded',     color: 'text-green-400 border-green-500/30 bg-green-500/5',   dot: 'bg-green-400' },
+    error:   { label: 'Error',      color: 'text-error border-error/30 bg-error/5',               dot: 'bg-error' },
+  }
+  const c = configs[status]
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${c.color}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
+      {c.label}
+    </span>
+  )
+}
+
 export default function InsightsPage({ params }: { params: Promise<{ repo: string }> }) {
   const unwrappedParams = React.use(params)
   const repoId = unwrappedParams.repo
   const [expanded, setExpanded] = useState<string | null>(null)
   const [insights, setInsights] = useState<Record<string, string>>({})
-  const [loadingSection, setLoadingSection] = useState<string | null>(null)
+  const [statuses, setStatuses] = useState<Record<string, SectionStatus>>({})
+  const [generatingAll, setGeneratingAll] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
@@ -73,37 +105,65 @@ export default function InsightsPage({ params }: { params: Promise<{ repo: strin
     },
   ]
 
+  const fetchSection = async (section: SectionDef) => {
+    setStatuses((prev) => ({ ...prev, [section.id]: 'loading' }))
+    try {
+      const res = await fetch(`${API_URL}/repositories/${repoId}/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: section.query }),
+      })
+      const data = await res.json()
+      setInsights((prev) => ({ ...prev, [section.id]: data.answer || 'No insights found.' }))
+      setStatuses((prev) => ({ ...prev, [section.id]: 'loaded' }))
+    } catch {
+      setInsights((prev) => ({ ...prev, [section.id]: 'Failed to generate insights.' }))
+      setStatuses((prev) => ({ ...prev, [section.id]: 'error' }))
+    }
+  }
+
   const toggle = async (section: SectionDef) => {
     if (expanded === section.id) {
       setExpanded(null)
       return
     }
     setExpanded(section.id)
-
     if (!insights[section.id]) {
-      setLoadingSection(section.id)
-      try {
-        const res = await fetch(`${API_URL}/repositories/${repoId}/search`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: section.query }),
-        })
-        const data = await res.json()
-        setInsights((prev) => ({ ...prev, [section.id]: data.answer || 'No insights found.' }))
-      } catch (err) {
-        setInsights((prev) => ({ ...prev, [section.id]: 'Failed to generate insights.' }))
-      } finally {
-        setLoadingSection(null)
-      }
+      await fetchSection(section)
     }
   }
+
+  const generateAll = async () => {
+    setGeneratingAll(true)
+    const pending = sections.filter((s) => !insights[s.id])
+    await Promise.all(pending.map(fetchSection))
+    setGeneratingAll(false)
+    // Expand first section
+    if (sections.length > 0) setExpanded(sections[0].id)
+  }
+
+  const copySection = async (id: string) => {
+    const text = insights[id]
+    if (!text) return
+    await navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  const filteredSections = sections.filter((s) =>
+    !searchQuery ||
+    s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.subtitle.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const loadedCount = sections.filter((s) => statuses[s.id] === 'loaded').length
 
   return (
     <div className="min-h-screen bg-background">
       <Sidebar activeItem="docs" />
       <TopBar activeNav="history" />
 
-      <main className="ml-64 mt-16 px-8 py-8 flex justify-center">
+      <main className="ml-64 mt-16 px-8 py-8 flex justify-center transition-all duration-300">
         <div className="w-full max-w-[1100px]">
           {/* Header */}
           <motion.section
@@ -111,19 +171,89 @@ export default function InsightsPage({ params }: { params: Promise<{ repo: strin
             animate={{ opacity: 1, y: 0 }}
             className="mb-10"
           >
-            <div className="flex items-center gap-2 text-primary mb-2 text-sm font-medium">
-              <span className="material-symbols-outlined text-[18px]">analytics</span>
-              System Analysis
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-primary mb-2 text-sm font-medium">
+                  <span className="material-symbols-outlined text-[18px]">analytics</span>
+                  System Analysis
+                </div>
+                <h2 className="text-3xl font-bold text-on-surface mb-3">Extracted Information</h2>
+                <p className="text-on-surface-variant max-w-2xl">
+                  Our AI audited your repository structure and logic flow. Expand each section for a granular deep-dive dynamically generated by Gemini!
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Progress pill */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low border border-outline-variant/40 text-xs text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[14px] text-primary">check_circle</span>
+                  {loadedCount}/{sections.length} loaded
+                </div>
+
+                {/* Generate All */}
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={generateAll}
+                  disabled={generatingAll || loadedCount === sections.length}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-semibold disabled:opacity-50 transition-all"
+                >
+                  {generatingAll ? (
+                    <>
+                      <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                      Generating…
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+                      Generate All
+                    </>
+                  )}
+                </motion.button>
+              </div>
             </div>
-            <h2 className="text-3xl font-bold text-on-surface mb-3">Extracted Information</h2>
-            <p className="text-on-surface-variant max-w-2xl">
-              Our AI audited your repository structure and logic flow. Expand each section for a granular deep-dive dynamically generated by Gemini!
-            </p>
+
+            {/* Search filter */}
+            <div className="relative mt-6 max-w-sm">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+              <input
+                className="w-full bg-surface-container-low border border-outline-variant/50 rounded-xl py-2.5 pl-10 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                placeholder="Filter sections…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <AnimatePresence>
+                {searchQuery && (
+                  <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </div>
           </motion.section>
 
           {/* Accordion sections */}
           <div className="space-y-3 mb-12">
-            {sections.map((section, i) => (
+            <AnimatePresence>
+              {filteredSections.length === 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center py-12 text-on-surface-variant"
+                >
+                  <span className="material-symbols-outlined text-[48px] mb-3 block">search_off</span>
+                  No sections match "{searchQuery}"
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {filteredSections.map((section, i) => (
               <motion.div
                 key={section.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -141,7 +271,10 @@ export default function InsightsPage({ params }: { params: Promise<{ repo: strin
                       <span className="material-symbols-outlined text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>{section.icon}</span>
                     </div>
                     <div className="text-left">
-                      <h3 className="font-semibold text-on-surface">{section.title}</h3>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="font-semibold text-on-surface">{section.title}</h3>
+                        <StatusBadge status={statuses[section.id] || 'idle'} />
+                      </div>
                       <p className="text-xs text-on-surface-variant">{section.subtitle}</p>
                     </div>
                   </div>
@@ -164,15 +297,30 @@ export default function InsightsPage({ params }: { params: Promise<{ repo: strin
                       className="overflow-hidden"
                     >
                       <div className="px-6 pb-6 pt-2 border-t border-outline-variant/30">
-                        {loadingSection === section.id ? (
-                          <div className="flex items-center gap-3 text-primary text-sm p-4">
-                            <span className="material-symbols-outlined animate-spin">sync</span>
-                            Generating AI insight...
-                          </div>
+                        {statuses[section.id] === 'loading' ? (
+                          <SkeletonBlock />
                         ) : (
-                          <div className="prose prose-invert prose-sm prose-primary max-w-none">
-                            <ReactMarkdown>{insights[section.id]}</ReactMarkdown>
-                          </div>
+                          <>
+                            {/* Copy button */}
+                            {insights[section.id] && (
+                              <div className="flex justify-end mb-3">
+                                <motion.button
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => copySection(section.id)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-outline-variant/40 text-xs text-on-surface-variant hover:text-primary hover:border-primary/30 transition-all"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">
+                                    {copiedId === section.id ? 'check' : 'content_copy'}
+                                  </span>
+                                  {copiedId === section.id ? 'Copied!' : 'Copy'}
+                                </motion.button>
+                              </div>
+                            )}
+                            <div className="prose prose-invert prose-sm prose-primary max-w-none">
+                              <ReactMarkdown>{insights[section.id]}</ReactMarkdown>
+                            </div>
+                          </>
                         )}
                       </div>
                     </motion.div>
